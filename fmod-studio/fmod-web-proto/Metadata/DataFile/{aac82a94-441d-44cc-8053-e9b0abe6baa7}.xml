@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<objects serializationModel="Studio.02.03.00">
+	<object class="DataFile" id="{aac82a94-441d-44cc-8053-e9b0abe6baa7}">
+		<property name="assetPath">
+			<value>singularity/singularity_calm_0.mpga</value>
+		</property>
+		<relationship name="masterAssetFolder">
+			<destination>{75d4278e-5350-4b89-8b07-39ac8b7cbe43}</destination>
+		</relationship>
+	</object>
+</objects>
