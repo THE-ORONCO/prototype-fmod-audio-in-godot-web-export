@@ -43,7 +43,7 @@ sequenceDiagram
     participant B as fmod_engine_module/backend.gd
     E ->> M: module init (SCENE level)
     M ->> F: Studio::System create + initialize
-    M ->> M: emscripten_set_interval(update, 20 ms)
+    M ->> M: update() every frame (requestAnimationFrame loop)
     E ->> B: gallery instances backend (is_available = FmodStudio singleton exists)
     B ->> M: load_bank("res://banks/Master*.bank")
     M ->> F: FileAccess bytes from .pck → loadBankMemory
@@ -74,9 +74,11 @@ therefore stops by itself when the gallery switches to another prototype.
 
 ## Design notes
 
-- **The update pump lives in C++.** The non-pthread FMOD build only mixes inside `System::update()`. A 20 ms browser
-  interval matches the `fmod_html5` bridge, so the two web FMOD prototypes are comparable. It also keeps running after
-  a backend node is freed, which is why the gdextension prototype keeps `FmodManager` in the gallery.
+- **The update pump lives in C++.** Studio commands (start, stop, parameters) are only processed in
+  `System::update()`. The module drives it from a requestAnimationFrame loop by default, or a timer with
+  `?fmod_update=<ms>`, the same way the `fmod_html5` bridge does, so the two web FMOD prototypes stay comparable. The
+  loop runs outside the SceneTree, so it keeps going after a backend node is freed. That's the same reason the
+  gdextension prototype keeps `FmodManager` in the gallery.
 - **Link settings go in `config.py` `configure()`, not in `SCsub`.** `platform/web/SCsub` runs before `modules/SCsub`
   and freezes `EXPORTED_RUNTIME_METHODS` into a single `-s` flag. The FMOD docs require
   `ccall,cwrap,setValue,getValue`, so the module appends them, and the static library, during `configure()`.
@@ -88,6 +90,27 @@ therefore stops by itself when the gallery switches to another prototype.
 - **The toolchains differ.** FMOD 2.03.15 is compiled with Emscripten 3.1.67, while Godot 4.8 needs Emscripten 6.0.1
   or newer. A standalone test, which linked `fmodstudio_wasm.a` with Godot's link flags under Emscripten 6.0.10 and
   played the bank in Chromium, showed that the static library still links and runs.
+
+## Latency settings (URL parameters)
+
+FMOD's output buffer and the `System::update()` cadence can be changed per page load, so you can compare them by ear
+in two tabs without rebuilding:
+
+| Parameter | Values | Default |
+|---|---|---|
+| `fmod_buffer` | `<length>x<count>`, e.g. `1024x4`, `2048x2` | `512x4`, about 43 ms, the same as the desktop gdextension |
+| `fmod_update` | milliseconds, or `frame` (requestAnimationFrame) | `frame` |
+
+The defaults were 2048×2 (about 85 ms, the FMOD HTML5 docs' advice against WebAudio underruns) and 20 ms, and the
+click and footstep lagged audibly behind the Godot-native version. In the listening test, 512×4 + `frame` sounded
+better. The trade-off: FMOD and Godot share the browser's main thread here, so the buffer is the cushion against frame
+stalls. About 43 ms covers 2–3 frames at 60 fps. If a heavier game shows dropouts during loads or on slow devices, try
+`1024x4` first, then `2048x2`. In background tabs `frame` updates pause, so new commands wait until the tab is visible;
+music that is already playing continues.
+
+Example of the old, safer setting: `http://localhost:8060/?fmod_buffer=2048x2&fmod_update=20`. The values FMOD actually uses are printed to the browser console
+and included in `describe()`, e.g. `dsp=512x4 (43 ms) rate=48000 update=every frame`. Invalid values fall back to the
+defaults. Smaller buffers lower the latency but can crackle on slow devices.
 
 ## Results
 

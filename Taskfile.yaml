@@ -60,12 +60,14 @@ tasks:
     desc: 'Prototype: FMOD linked into custom Godot web templates, served on http://localhost:{{.PORT}}'
     deps: [export:web-fmod-module]
     cmds:
+      - 'echo "Latency A/B: http://localhost:{{.PORT}}/?fmod_buffer=2048x2&fmod_update=20 (safer, slower; defaults: 512x4, every frame)"'
       - python3 -m http.server {{.PORT}} -d build/web-fmod-module
 
   run:web:fmod-html5:
     desc: 'Prototype: FMOD HTML5 SDK + JavaScriptBridge in a web build, served on http://localhost:{{.PORT}}'
     deps: [export:web-fmod-html5]
     cmds:
+      - 'echo "Latency A/B: http://localhost:{{.PORT}}/?fmod_buffer=2048x2&fmod_update=20 (safer, slower; defaults: 512x4, every frame)"'
       - python3 -m http.server {{.PORT}} -d build/web-fmod-html5
 
   check:

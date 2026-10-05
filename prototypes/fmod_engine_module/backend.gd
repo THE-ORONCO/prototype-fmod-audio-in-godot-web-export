@@ -40,6 +40,6 @@ func describe() -> String:
 	var sfx := []
 	for path: String in EVENTS.values():
 		sfx.append("%s=%d" % [path.get_file(), _fmod.call("get_instance_count", path)])
-	return "%s state=%s Tension=%s sfx_instances(%s) lastError=%s" % [", ".join(paths),
+	return "%s state=%s Tension=%s sfx_instances(%s) %s lastError=%s" % [", ".join(paths),
 		_music.call("get_playback_state"), _music.call("get_parameter", "Tension"), ", ".join(sfx),
-		_fmod.call("get_last_error")]
+		_fmod.call("get_settings"), _fmod.call("get_last_error")]

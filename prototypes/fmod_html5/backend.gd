@@ -32,4 +32,4 @@ func play_sfx(sfx: String) -> void:
 
 
 func describe() -> String:
-	return "ready=%s lastError=%s" % [_bridge.get("ready"), _bridge.get("lastError")]
+	return "ready=%s %s lastError=%s" % [_bridge.get("ready"), _bridge.get("settings"), _bridge.get("lastError")]

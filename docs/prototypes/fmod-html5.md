@@ -20,7 +20,7 @@ sequenceDiagram
     Page ->> F: load fmodstudio.js (head_include script tag)
     Page ->> Br: load fmod_bridge.js
     Br ->> F: FMODModule(), then onRuntimeInitialized
-    F -->> Br: Studio system created, initialized, update() every 20 ms
+    F -->> Br: Studio system created, initialized, update() every frame (default)
     Note over Br: calls arriving before ready are queued
     G ->> B: is_available? (web && typeof window.fmodBridge == "object")
     B ->> B: read res://banks/*.bank from .pck
@@ -55,9 +55,30 @@ js -- FS_createDataFile + loadBankFile --> fmod[FMOD wasm]
 | File                                      | Role                                                                                                                                                                              |
 |-------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `backend.gd`                              | `AudioBackend` → `window.fmodBridge` calls                                                                                                                                        |
-| `web/fmod_bridge.js`                      | Initializes FMOD (output at the driver's sample rate, 2048×2 DSP buffer), queues early calls, exposes `loadBank`, `startMusic`, `setTension`, `playOneShot`, `ready`, `lastError` |
+| `web/fmod_bridge.js`                      | Initializes FMOD (output at the driver's sample rate; DSP buffer and update cadence from the URL, see below), queues early calls, exposes `loadBank`, `startMusic`, `setTension`, `playOneShot`, `ready`, `lastError` |
 | `export_presets.cfg` → "Web FMOD HTML5"   | Adds `<script>` tags through `html/head_include` and includes the banks                                                                                                           |
 | `Taskfile.yaml` → `export:web-fmod-html5` | Exports, unzips `fmodstudio.js`/`.wasm` from the SDK, copies the bridge                                                                                                           |
+
+## Latency settings (URL parameters)
+
+FMOD's output buffer and the `System::update()` cadence can be changed per page load, so you can compare them by ear
+in two tabs without rebuilding:
+
+| Parameter | Values | Default |
+|---|---|---|
+| `fmod_buffer` | `<length>x<count>`, e.g. `1024x4`, `2048x2` | `512x4`, about 43 ms, the same as the desktop gdextension |
+| `fmod_update` | milliseconds, or `frame` (requestAnimationFrame) | `frame` |
+
+The defaults were 2048×2 (about 85 ms, the FMOD HTML5 docs' advice against WebAudio underruns) and 20 ms, and the
+click and footstep lagged audibly behind the Godot-native version. In the listening test, 512×4 + `frame` sounded
+better. The trade-off: FMOD and Godot share the browser's main thread here, so the buffer is the cushion against frame
+stalls. About 43 ms covers 2–3 frames at 60 fps. If a heavier game shows dropouts during loads or on slow devices, try
+`1024x4` first, then `2048x2`. In background tabs `frame` updates pause, so new commands wait until the tab is visible;
+music that is already playing continues.
+
+Example of the old, safer setting: `http://localhost:8060/?fmod_buffer=2048x2&fmod_update=20`. The values FMOD actually uses are printed to the browser console
+and included in `describe()`, e.g. `dsp=512x4 (43 ms) rate=48000 update=every frame`. Invalid values fall back to the
+defaults. Smaller buffers lower the latency, but can crackle on slow devices.
 
 ## Results
 

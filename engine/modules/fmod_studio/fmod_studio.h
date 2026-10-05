@@ -33,10 +33,13 @@ class FmodStudio : public Object {
 	FMOD::Studio::System *system = nullptr;
 	String last_error;
 	long update_interval = 0;
+	String settings;
+	static FmodStudio *singleton; // For the requestAnimationFrame loop, which can't be cancelled from outside.
 
 	bool check(int p_result, const String &p_what);
 	FMOD::Studio::EventInstance *new_instance(const String &p_path);
 	static void update(void *p_self);
+	static bool update_frame(double p_time, void *p_self);
 
 protected:
 	static void _bind_methods();
@@ -49,6 +52,7 @@ public:
 	Ref<FmodStudioEvent> create_instance(const String &p_path);
 	void play_one_shot(const String &p_path);
 	String get_last_error() const { return last_error; }
+	String get_settings() const { return settings; } // Effective DSP buffer, mix rate and update cadence.
 
 	FmodStudio();
 	~FmodStudio();
