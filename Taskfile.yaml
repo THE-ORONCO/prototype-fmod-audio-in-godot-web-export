@@ -1,0 +1,87 @@
+# Adaptive audio gallery. `task` lists everything; see README.md.
+version: '3'
+
+vars:
+  GODOT: '{{.GODOT | default "godot"}}'
+  FMOD_HTML5_SDK: '{{.FMOD_HTML5_SDK | default "fmod/fmodstudioapi20315html5.zip"}}'
+  SDK_LIB: fmodstudioapi20315html5/api/studio/lib/wasm
+  PORT: '{{.PORT | default "8060"}}'
+  EXPORT_SOURCES: &export_sources
+    - gallery/**
+    - prototypes/**
+    - audio/**
+    - banks/**
+    - project.godot
+    - export_presets.cfg
+
+tasks:
+  default:
+    desc: List all tasks
+    silent: true
+    cmds:
+      - task --list
+
+  import:
+    desc: Import project resources (once after cloning, or after moving assets)
+    cmds:
+      - '{{.GODOT}} --headless --path . --import'
+
+  run:
+    desc: Desktop gallery with prototype picker
+    cmds:
+      - '{{.GODOT}} --path .'
+
+  run:fmod-gdextension:
+    desc: 'Prototype: FMOD Studio via fmod-gdextension (desktop)'
+    cmds:
+      - '{{.GODOT}} --path . -- --prototype=fmod_gdextension'
+
+  run:godot-native:
+    desc: 'Prototype: Godot-native AudioStreamSynchronized + Randomizer (desktop)'
+    cmds:
+      - '{{.GODOT}} --path . -- --prototype=godot_native'
+
+  run:web:godot-native:
+    desc: 'Prototype: Godot-native audio in a web build, served on http://localhost:{{.PORT}}'
+    deps: [export:web]
+    cmds:
+      - python3 -m http.server {{.PORT}} -d build/web
+
+  run:web:fmod-html5:
+    desc: 'Prototype: FMOD HTML5 SDK + JavaScriptBridge in a web build, served on http://localhost:{{.PORT}}'
+    deps: [export:web-fmod-html5]
+    cmds:
+      - python3 -m http.server {{.PORT}} -d build/web-fmod-html5
+
+  check:
+    desc: Headless smoke test of every prototype available on desktop
+    cmds:
+      - '{{.GODOT}} --headless --path . -- --check'
+
+  banks:
+    desc: Copy banks built by FMOD Studio into banks/
+    sources: [fmod-studio/fmod-web-proto/Build/Desktop/*.bank]
+    generates: [banks/*.bank]
+    cmds:
+      - cp fmod-studio/fmod-web-proto/Build/Desktop/*.bank banks/
+
+  export:web:
+    desc: Export the Godot-native web build to build/web
+    sources: *export_sources
+    generates: [build/web/index.pck]
+    cmds:
+      - mkdir -p build/web
+      - '{{.GODOT}} --headless --path . --export-release "Web" build/web/index.html'
+
+  export:web-fmod-html5:
+    desc: Export the FMOD HTML5 web build to build/web-fmod-html5 (needs the FMOD HTML5 SDK zip)
+    sources: *export_sources
+    generates: [build/web-fmod-html5/index.pck, build/web-fmod-html5/fmodstudio.wasm]
+    preconditions:
+      - sh: test -f "{{.FMOD_HTML5_SDK}}"
+        msg: 'FMOD HTML5 SDK not found at {{.FMOD_HTML5_SDK}}. Download "FMOD Engine HTML5" 2.03.x from fmod.com into fmod/, or set FMOD_HTML5_SDK=/path/to/zip.'
+    cmds:
+      - mkdir -p build/web-fmod-html5
+      - '{{.GODOT}} --headless --path . --export-release "Web FMOD HTML5" build/web-fmod-html5/index.html'
+      - unzip -ojq "{{.FMOD_HTML5_SDK}}" "{{.SDK_LIB}}/fmodstudio.js" "{{.SDK_LIB}}/fmodstudio.wasm" -d build/web-fmod-html5
+      - cp prototypes/fmod_html5/web/fmod_bridge.js build/web-fmod-html5/

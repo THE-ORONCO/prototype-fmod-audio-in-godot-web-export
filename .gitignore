@@ -1,0 +1,7 @@
+.godot/
+.idea/
+build/*
+!build/.gdignore
+fmod/*
+!fmod/.gdignore
+.task/
