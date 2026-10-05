@@ -33,6 +33,27 @@ flowchart LR
 `task run` opens the desktop launcher, where you can pick a prototype from a dropdown. `task check` runs a headless
 smoke test of every prototype that is available on desktop.
 
+## Results
+
+All four approaches play the same adaptive demo. Which one to use depends on two questions: do you author the sound in
+FMOD Studio, and do you need a web build? A web build matters, for example, for a portfolio: a link to a playable page
+is easier to share than an executable.
+
+- **No FMOD needed:** use **Godot native**. It works on desktop and web with the official templates and needs no setup,
+  but adaptive behaviour has to be programmed rather than authored.
+- **FMOD Studio, desktop only:** use the **FMOD gdextension**. It exposes almost the full Studio API and is the
+  reference for latency and features.
+- **FMOD Studio on desktop and web (recommended):** use the **gdextension on desktop plus the FMOD HTML5 SDK bridge on
+  web**. Both load the same banks, so the sound is designed once. The bridge works with the official templates and
+  survives Godot updates unchanged. The cost: every FMOD feature the game uses on the web has to be added to
+  `fmod_bridge.js`.
+- **The FMOD engine module** is the cleanest integration: one native API, and FMOD runs inside Godot's wasm. But every
+  Godot update means rebuilding the custom template from the editor's exact commit, plus maintaining C++. That only
+  pays off if someone owns the engine build long-term.
+
+On web, use the desktop-like FMOD buffer settings (512×4, an update every frame; now the default). The FMOD HTML5 docs'
+2048×2 adds an audible delay. Fall back to `1024x4` if a heavier game crackles.
+
 ## Quick start
 
 Prerequisites:
