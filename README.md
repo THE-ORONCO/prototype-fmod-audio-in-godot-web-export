@@ -13,8 +13,10 @@ flowchart LR
     B --> P1["fmod_gdextension<br/>FMOD Studio<br/>(native lib)"]
     B --> P3["godot_native<br/>AudioStreamSynchronized"]
     B --> P2["fmod_html5<br/>FMOD Studio<br/>(wasm, in page)"]
+    B --> P4["fmod_engine_module<br/>FMOD Studio<br/>(linked into Godot's wasm)"]
     P1 --> OUT1[OS audio device]
     P2 --> OUT2[Browser WebAudio]
+    P4 --> OUT2
     P3 --> OUT1
     P3 --> OUT2
 ```
@@ -23,12 +25,12 @@ flowchart LR
 
 | Prototype                                                   | Technique                                                                    | Platforms     | Run                                          | Status                            |
 |-------------------------------------------------------------|------------------------------------------------------------------------------|---------------|----------------------------------------------|-----------------------------------|
-| [FMOD gdextension](docs/prototypes/fmod-gdextension.md)     | FMOD Studio banks through the `fmod-gdextension` addon                       | Desktop       | `task fmod-gdextension`                      | Works (desktop reference)         |
-| [FMOD HTML5 SDK](docs/prototypes/fmod-html5.md)             | FMOD's own HTML5/wasm runtime in the page, called through `JavaScriptBridge` | Web           | `task web:fmod-html5`                        | Works (tested in Firefox desktop) |
-| [Godot native](docs/prototypes/godot-native.md)             | `AudioStreamSynchronized` + `AudioStreamRandomizer`, no FMOD                 | Desktop + Web | `task godot-native`, `task web:godot-native` | Works                             |
-| [FMOD engine module](docs/prototypes/fmod-engine-module.md) | FMOD compiled into custom Godot web templates                                | Web           | –                                            | Postponed, not built              |
+| [FMOD gdextension](docs/prototypes/fmod-gdextension.md)     | FMOD Studio banks through the `fmod-gdextension` addon                       | Desktop       | `task run:fmod-gdextension`                      | Works (desktop reference)         |
+| [FMOD HTML5 SDK](docs/prototypes/fmod-html5.md)             | FMOD's own HTML5/wasm runtime in the page, called through `JavaScriptBridge` | Web           | `task run:web:fmod-html5`                        | Works (tested in Firefox desktop) |
+| [Godot native](docs/prototypes/godot-native.md)             | `AudioStreamSynchronized` + `AudioStreamRandomizer`, no FMOD                 | Desktop + Web | `task run:godot-native`, `task run:web:godot-native` | Works                             |
+| [FMOD engine module](docs/prototypes/fmod-engine-module.md) | Our own engine module links FMOD's static wasm library into custom Godot web templates | Web | `task run:web:fmod-engine-module` | Works (music verified by listening; SFX fix awaiting re-listen) |
 
-`task gallery` opens the desktop launcher, where you can pick a prototype from a dropdown. `task check` runs a headless
+`task run` opens the desktop launcher, where you can pick a prototype from a dropdown. `task check` runs a headless
 smoke test of every prototype that is available on desktop.
 
 ## Quick start
@@ -42,13 +44,16 @@ Prerequisites:
 - **FMOD HTML5 SDK 2.03.x** (`fmodstudioapi20315html5.zip` from fmod.com). It is only needed for `web:fmod-html5`. Put
   it in `fmod/`, or set `FMOD_HTML5_SDK=/path/to/zip`. Its licence doesn't allow committing it, so `fmod/` is
   gitignored.
+- **Only for the engine-module prototype:** [uv](https://docs.astral.sh/uv/), Emscripten 6.0.1+ and git. uv provides SCons in a project-local venv (`engine/.venv`, pinned by `engine/uv.lock`), so nothing is installed system-wide. Run `task tools:check` to see what's
+  missing. The first `task run:web:fmod-engine-module` fetches the Godot source (about 430 MB, gitignored in
+  `engine/godot/`) and builds the web template, which takes roughly 10–20 minutes.
 - The desktop FMOD runtime ships inside `addons/fmod/` (fmod-gdextension 6.1.0, FMOD 2.03.6).
 
 ```sh
 task import            # once after cloning
 task check             # headless: prints one [check] line per desktop prototype
-task godot-native      # desktop window, Godot audio
-task web:fmod-html5    # export + serve on http://localhost:8060 (PORT=… to change)
+task run:godot-native  # desktop window, Godot audio
+task run:web:fmod-html5 # export + serve on http://localhost:8060 (PORT=… to change)
 ```
 
 In the window: press **Start music**, drag **Tension**, then press **Click** or **Footstep**. In browsers, the first
@@ -66,6 +71,8 @@ prototypes/
 audio/                 source loops and SFX (used by godot_native)
 banks/                 FMOD banks built from fmod-studio/ (used by both FMOD prototypes)
 fmod-studio/           FMOD Studio 2.03.15 project that produces the banks
+engine/modules/        our fmod_studio engine module (C++), built into custom web templates
+engine/godot/          Godot source checkout for the template build (gitignored, fetched by task)
 addons/fmod/           fmod-gdextension addon (desktop libraries)
 export_presets.cfg     "Web" (Godot audio) and "Web FMOD HTML5" presets
 Taskfile.yaml          one task per prototype, plus export/check/banks
@@ -84,13 +91,14 @@ Prototypes: [FMOD gdextension](docs/prototypes/fmod-gdextension.md) · [FMOD HTM
 
 ## Findings so far
 
-|                          | FMOD gdextension                 | FMOD HTML5 SDK                      | Godot native           |
-|--------------------------|----------------------------------|-------------------------------------|------------------------|
-| Desktop                  | ✅                               | –                                   | ✅                     |
-| Web (official templates) | ❌ no GDExtension support on web | ✅                                  | ✅                     |
-| Authoring                | FMOD Studio                      | FMOD Studio (same banks)            | Code / Godot resources |
-| Extra web download       | –                                | ~2.8 MB FMOD wasm/js + ~5.5 MB bank | –                      |
-| Web `index.pck`          | –                                | 20.1 MB                             | 14.6 MB                |
+|                     | FMOD gdextension                 | FMOD HTML5 SDK                     | FMOD engine module                 | Godot native           |
+|---------------------|----------------------------------|------------------------------------|------------------------------------|------------------------|
+| Desktop             | ✅                               | –                                  | – (web-only module)                | ✅                     |
+| Web                 | ❌ no GDExtension support on web | ✅ official templates               | ✅ custom template                  | ✅ official templates   |
+| Authoring           | FMOD Studio                      | FMOD Studio (same banks)           | FMOD Studio (same banks)           | Code / Godot resources |
+| GDScript → FMOD     | native singleton                 | `JavaScriptBridge` strings          | native singleton                   | –                      |
+| Web `index.wasm`    | –                                | 38.6 MB + 2.8 MB FMOD js/wasm      | 38.6 MB (FMOD inside, ~1.1 MB of it) | 38.6 MB                |
+| Web `index.pck`     | –                                | 20.1 MB (incl. 5.5 MB bank)        | 20.1 MB (incl. 5.5 MB bank)        | 14.6 MB                |
+| Build cost          | –                                | unzip SDK files                    | ~10–20 min template build per engine update | –          |
 
-Both web builds share the same `index.wasm` (38.6 MB, uncompressed). Mobile browsers have not been tested (mobile isn't
-a target for now).
+Sizes are uncompressed. Mobile browsers have not been tested, since mobile isn't a target for now.

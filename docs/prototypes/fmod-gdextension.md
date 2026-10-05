@@ -1,6 +1,6 @@
 # FMOD gdextension (desktop)
 
-`prototypes/fmod_gdextension/backend.gd` · run with `task fmod-gdextension`
+`prototypes/fmod_gdextension/backend.gd` · run with `task run:fmod-gdextension`
 
 This prototype runs FMOD Studio through [fmod-gdextension](https://github.com/utopia-rise/fmod-gdextension) (addon
 6.1.0, FMOD runtime 2.03.6, in `addons/fmod/`). It is the **desktop reference**: the sound designer authors all adaptive

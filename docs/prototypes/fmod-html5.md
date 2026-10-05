@@ -2,7 +2,7 @@
 
 `prototypes/fmod_html5/`
 
-run with `task web:fmod-html5` (needs the SDK zip in `fmod/`)
+run with `task run:web:fmod-html5` (needs the SDK zip in `fmod/`)
 
 This prototype loads FMOD's own HTML5 build of the Studio runtime (`fmodstudio.js` + `fmodstudio.wasm`, SDK 2.03.15)
 into the page **next to** the Godot engine. GDScript calls it through `JavaScriptBridge`. The banks are the same desktop

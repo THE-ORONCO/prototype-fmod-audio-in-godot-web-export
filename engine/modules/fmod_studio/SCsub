@@ -1,0 +1,11 @@
+#!/usr/bin/env python
+import os
+
+Import("env")
+Import("env_modules")
+
+api = os.path.join(env["fmod_sdk_path"], "api")
+
+env_fmod = env_modules.Clone()
+env_fmod.Prepend(CPPPATH=[os.path.join(api, "core", "inc"), os.path.join(api, "studio", "inc")])
+env_fmod.add_source_files(env.modules_sources, "*.cpp")

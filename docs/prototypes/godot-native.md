@@ -2,7 +2,7 @@
 
 `prototypes/godot_native/backend.gd`
 
-run with `task godot-native` or `task web:godot-native`
+run with `task run:godot-native` or `task run:web:godot-native`
 
 This prototype rebuilds the FMOD demo with Godot's built-in audio only. It is the cheapest option and works on every export target, including the official web templates. It is the baseline the FMOD prototypes are measured against.
 

@@ -6,6 +6,15 @@ vars:
   FMOD_HTML5_SDK: '{{.FMOD_HTML5_SDK | default "fmod/fmodstudioapi20315html5.zip"}}'
   SDK_LIB: fmodstudioapi20315html5/api/studio/lib/wasm
   PORT: '{{.PORT | default "8060"}}'
+  # Custom engine build: Godot source pinned to the commit of the editor (4.8.dev7), plus our engine/modules/.
+  GODOT_SHA: c971f93e7e76b0ef919bf6009e7b868bea04db7f
+  GODOT_SRC: engine/godot
+  FMOD_SDK_DIR: engine/fmod-sdk/fmodstudioapi20315html5
+  TEMPLATE: build/templates/godot.web.template_release.wasm32.nothreads.zip
+  # SCons comes from the uv project in engine/ (engine/.venv, created on first use), never from the system.
+  SCONS: uv run --project engine scons
+  JOBS:
+    sh: echo "${JOBS:-$(nproc)}"
   EXPORT_SOURCES: &export_sources
     - gallery/**
     - prototypes/**
@@ -47,6 +56,12 @@ tasks:
     cmds:
       - python3 -m http.server {{.PORT}} -d build/web
 
+  run:web:fmod-engine-module:
+    desc: 'Prototype: FMOD linked into custom Godot web templates, served on http://localhost:{{.PORT}}'
+    deps: [export:web-fmod-module]
+    cmds:
+      - python3 -m http.server {{.PORT}} -d build/web-fmod-module
+
   run:web:fmod-html5:
     desc: 'Prototype: FMOD HTML5 SDK + JavaScriptBridge in a web build, served on http://localhost:{{.PORT}}'
     deps: [export:web-fmod-html5]
@@ -85,3 +100,84 @@ tasks:
       - '{{.GODOT}} --headless --path . --export-release "Web FMOD HTML5" build/web-fmod-html5/index.html'
       - unzip -ojq "{{.FMOD_HTML5_SDK}}" "{{.SDK_LIB}}/fmodstudio.js" "{{.SDK_LIB}}/fmodstudio.wasm" -d build/web-fmod-html5
       - cp prototypes/fmod_html5/web/fmod_bridge.js build/web-fmod-html5/
+
+  export:web-fmod-module:
+    desc: Export with the custom FMOD web template to build/web-fmod-module (runs engine:build if needed)
+    deps: [engine:build]
+    sources:
+      - gallery/**
+      - prototypes/**
+      - audio/**
+      - banks/**
+      - project.godot
+      - export_presets.cfg
+      - '{{.TEMPLATE}}'
+    generates: [build/web-fmod-module/index.pck]
+    cmds:
+      - mkdir -p build/web-fmod-module
+      - '{{.GODOT}} --headless --path . --export-release "Web FMOD Module" build/web-fmod-module/index.html'
+
+  tools:check:
+    desc: Check that everything the custom engine build needs is installed
+    silent: true
+    cmds:
+      - |
+        fail=0
+        need() { if command -v "$1" >/dev/null 2>&1; then echo "ok    $1"; else echo "MISS  $1: $2"; fail=1; fi; }
+        need git "install git"
+        need python3 "install python 3.8+"
+        need unzip "install unzip"
+        need uv "install uv (https://docs.astral.sh/uv/); it provides SCons in engine/.venv"
+        need emcc "install Emscripten 6.0.1+ (Arch: pacman -S emscripten, otherwise emsdk)"
+        need {{.GODOT}} "install Godot 4.8.dev7 (e.g. gdvm) or set GODOT=/path/to/godot"
+        if command -v uv >/dev/null 2>&1; then
+          v=$({{.SCONS}} --version 2>/dev/null | grep -oE ' v[0-9]+\.' | head -1 | tr -dc 0-9)
+          [ "${v:-0}" -ge 4 ] && echo "ok    scons major $v" || { echo "MISS  scons 4+ required (found ${v:-?})"; fail=1; }
+        fi
+        if command -v emcc >/dev/null 2>&1; then
+          v=$(emcc --version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          if printf '6.0.1\n%s\n' "$v" | sort -V -C; then echo "ok    emcc $v"; else echo "MISS  emcc 6.0.1+ required by Godot 4.8 (found $v)"; fail=1; fi
+        fi
+        if command -v {{.GODOT}} >/dev/null 2>&1; then
+          v=$({{.GODOT}} --version 2>/dev/null | tail -1)
+          case "$v" in *{{printf "%.9s" .GODOT_SHA}}*) echo "ok    godot $v";; *) echo "MISS  godot editor must be built from {{printf "%.9s" .GODOT_SHA}} to match the template (found $v)"; fail=1;; esac
+        fi
+        [ -f "{{.FMOD_HTML5_SDK}}" ] && echo "ok    FMOD HTML5 SDK {{.FMOD_HTML5_SDK}}" || { echo "MISS  FMOD HTML5 SDK zip at {{.FMOD_HTML5_SDK}} (download from fmod.com, or set FMOD_HTML5_SDK)"; fail=1; }
+        exit $fail
+
+  engine:fetch:
+    desc: Shallow-fetch the pinned Godot source into engine/godot (unmodified; our module comes in via custom_modules)
+    status:
+      - test "$(git -C {{.GODOT_SRC}} rev-parse HEAD 2>/dev/null)" = "{{.GODOT_SHA}}"
+    cmds:
+      - rm -rf {{.GODOT_SRC}}
+      - git init -q {{.GODOT_SRC}}
+      - git -C {{.GODOT_SRC}} remote add origin https://github.com/godotengine/godot.git
+      - git -C {{.GODOT_SRC}} fetch --depth 1 origin {{.GODOT_SHA}}
+      - git -C {{.GODOT_SRC}} checkout -q FETCH_HEAD
+
+  engine:sdk:
+    desc: Extract the FMOD HTML5 SDK headers and static libraries into engine/fmod-sdk
+    sources: ['{{.FMOD_HTML5_SDK}}']
+    generates: ['{{.FMOD_SDK_DIR}}/api/studio/lib/w32/fmodstudio_wasm.a']
+    cmds:
+      - mkdir -p engine/fmod-sdk
+      - unzip -oq "{{.FMOD_HTML5_SDK}}" 'fmodstudioapi20315html5/api/core/inc/*' 'fmodstudioapi20315html5/api/studio/inc/*' 'fmodstudioapi20315html5/api/studio/lib/w32/*' -d engine/fmod-sdk
+
+  engine:build:
+    desc: Build the Godot web release template with the fmod_studio module (JOBS=n, takes a while)
+    sources:
+      - engine/modules/**
+      - '{{.FMOD_HTML5_SDK}}'
+      - engine/uv.lock
+      - Taskfile.yaml  # holds GODOT_SHA; a new commit must rebuild (scons is a no-op when nothing changed)
+    generates: ['{{.TEMPLATE}}']
+    cmds:
+      - task: tools:check
+      - task: engine:fetch
+      - task: engine:sdk
+      - >-
+        {{.SCONS}} -C {{.GODOT_SRC}} -j{{.JOBS}} platform=web target=template_release threads=no
+        custom_modules={{.ROOT_DIR}}/engine/modules fmod_sdk_path={{.ROOT_DIR}}/{{.FMOD_SDK_DIR}}
+      - mkdir -p build/templates
+      - cp {{.GODOT_SRC}}/bin/godot.web.template_release.wasm32.nothreads.zip {{.TEMPLATE}}

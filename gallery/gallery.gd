@@ -6,6 +6,7 @@ extends Control
 const PROTOTYPES: Array[Dictionary] = [
 	{id = "fmod_gdextension", title = "FMOD (gdextension)", script = "res://prototypes/fmod_gdextension/backend.gd"},
 	{id = "fmod_html5", title = "FMOD (HTML5 SDK)", script = "res://prototypes/fmod_html5/backend.gd"},
+	{id = "fmod_engine_module", title = "FMOD (engine module)", script = "res://prototypes/fmod_engine_module/backend.gd"},
 	{id = "godot_native", title = "Godot audio", script = "res://prototypes/godot_native/backend.gd"},
 ]
 
@@ -97,8 +98,10 @@ func _self_check() -> void:
 		await get_tree().process_frame
 		_backend.start_music()
 		_backend.set_tension(0.7)
+		await get_tree().create_timer(1.0).timeout
+		# SFX last, so describe() can still see them playing (one-shots are shorter than the 1 s above).
 		_backend.play_sfx("click")
 		_backend.play_sfx("footstep")
-		await get_tree().create_timer(1.0).timeout
+		await get_tree().create_timer(0.1).timeout
 		print("[check] ", _available[i].id, ": ", _backend.describe())
 	get_tree().quit()

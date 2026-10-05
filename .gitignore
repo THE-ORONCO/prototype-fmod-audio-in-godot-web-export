@@ -5,3 +5,6 @@ build/*
 fmod/*
 !fmod/.gdignore
 .task/
+engine/godot/
+engine/fmod-sdk/
+engine/.venv/

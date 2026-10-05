@@ -9,34 +9,39 @@ prototype's folder.
 ```mermaid
 classDiagram
     class AudioBackend {
-<<prototypes/audio_backend.gd>>
-+is_available()$ bool
-+start_music()
-+set_tension(value: float)
-+play_sfx(name: String)
-+describe() String
-}
-class FmodGdextension["fmod_gdextension/backend.gd"] {
-FmodServer singleton
-banks from res: //banks
-}
-class FmodHtml5["fmod_html5/backend.gd"] {
-JavaScriptBridge → window.fmodBridge
-banks as base64
- }
-class GodotNative["godot_native/backend.gd"] {
-AudioStreamSynchronized
-AudioStreamRandomizer
-}
-AudioBackend <|-- FmodGdextension
-AudioBackend <|-- FmodHtml5
-AudioBackend <|-- GodotNative
-Gallery --> AudioBackend: drives one at a time
+        <<prototypes/audio_backend.gd>>
+        +is_available()$ bool
+        +start_music()
+        +set_tension(value: float)
+        +play_sfx(name: String)
+        +describe() String
+    }
+    class FmodGdextension["fmod_gdextension/backend.gd"] {
+        FmodServer singleton (addon)
+        banks loaded by path
+    }
+    class FmodHtml5["fmod_html5/backend.gd"] {
+        JavaScriptBridge to window.fmodBridge
+        banks passed as base64
+    }
+    class FmodEngineModule["fmod_engine_module/backend.gd"] {
+        FmodStudio singleton (engine module)
+        banks read from .pck in C++
+    }
+    class GodotNative["godot_native/backend.gd"] {
+        AudioStreamSynchronized
+        AudioStreamRandomizer
+    }
+    AudioBackend <|-- FmodGdextension
+    AudioBackend <|-- FmodHtml5
+    AudioBackend <|-- FmodEngineModule
+    AudioBackend <|-- GodotNative
+    Gallery --> AudioBackend : drives one at a time
 ```
 
 | Method                    | Meaning                                                                                                                                                                                                                         |
 |---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `is_available()` (static) | Whether the backend can run in this build. The gallery calls it on the script before instancing it, so a missing FMOD singleton or a missing JS bridge never causes an error.                                                   |
+| `is_available()` (static) | Whether the backend can run in this build. The gallery calls it on the script before instancing it, so a missing FMOD singleton (gdextension or engine module) or a missing JS bridge never causes an error.                                                   |
 | `start_music()`           | Starts the adaptive music event. It is called from a button press, which is also the user gesture browsers require before they play audio.                                                                                      |
 | `set_tension(v)`          | The adaptive parameter, 0 = calm, 1 = action. Smoothing is up to the backend: `godot_native` uses `move_toward` at 2/s. The FMOD backends rely on the parameter's seek speed in Studio, which is currently unset, so they snap. |
 | `play_sfx(name)`          | Plays a one-shot: `click` or `footstep`.                                                                                                                                                                                        |
@@ -71,17 +76,21 @@ so that update still happens.
 
 ```mermaid
 flowchart LR
-    src["gallery/ prototypes/<br/>audio/ banks/"] --> e1["export preset Web<br/>excludes addons/fmod, banks"]
-    src --> e2["export preset Web FMOD HTML5<br/>includes banks/*.bank<br/>head_include: fmodstudio.js, fmod_bridge.js"]
+    src["gallery/ prototypes/<br/>audio/ banks/"] --> e1["preset Web<br/>excludes addons/fmod, banks"]
+    src --> e2["preset Web FMOD HTML5<br/>includes banks/*.bank<br/>head_include: fmodstudio.js, fmod_bridge.js"]
+    src --> e3["preset Web FMOD Module<br/>includes banks/*.bank<br/>custom_template/release"]
     e1 --> w1[build/web/]
-e2 --> w2[build/web-fmod-html5/]
-sdk[(FMOD HTML5 SDK zip<br/>fmod/)] -- unzip fmodstudio . js/. wasm --> w2
-bridge[prototypes/fmod_html5/web/fmod_bridge.js] -- copy --> w2
-w1 --> serve[python3 -m http.server]
-w2 --> serve
+    e2 --> w2[build/web-fmod-html5/]
+    e3 --> w3[build/web-fmod-module/]
+    sdk[("FMOD HTML5 SDK zip<br/>fmod/")] -- "unzip fmodstudio.js + .wasm" --> w2
+    bridge[prototypes/fmod_html5/web/fmod_bridge.js] -- copy --> w2
+    tpl[("build/templates/<br/>custom web template")] --> e3
+    w1 --> serve[python3 -m http.server]
+    w2 --> serve
+    w3 --> serve
 ```
 
-Both presets use the official templates in single-threaded mode with no GDExtension support. That means no cross-origin
+All presets build single-threaded web exports with no GDExtension support. The first two use the official templates. "Web FMOD Module" uses the custom template from `task engine:build`; see [FMOD engine module](prototypes/fmod-engine-module.md). That means no cross-origin
 isolation headers (COOP/COEP) are needed, and any static file server works. Task's `sources`/`generates` skip the export
 when no input has changed.
 
@@ -89,7 +98,8 @@ when no input has changed.
 
 Godot imports every folder that lacks a `.gdignore`. These folders carry a committed `.gdignore`:
 
-- `build/`: export output
+- `build/`: export output and built templates
+- `engine/`: Godot source checkout, the extracted SDK, and the module's C++ code
 - `fmod/`: the proprietary SDK
 - `fmod-studio/`: FMOD Studio's own copies of the audio
 - `prototypes/fmod_html5/web/`: plain JS, not a Godot resource
@@ -99,7 +109,7 @@ Godot imports every folder that lacks a `.gdignore`. These folders carry a commi
 1. Create `prototypes/<id>/backend.gd` with `extends AudioBackend`, and implement the four methods plus `is_available()`
    if the backend is platform-specific.
 2. Add one entry `{id, title, script}` to `PROTOTYPES` in `gallery/gallery.gd`. The order sets the default.
-3. Add a `task <id>` (or `web:<id>`) to `Taskfile.yaml`. A web prototype that needs page-side JS gets its own export
+3. Add a `run:<id>` (or `run:web:<id>`) task to `Taskfile.yaml`. A web prototype that needs page-side JS gets its own export
    preset with `html/head_include`, plus an export task that copies the JS next to `index.html`.
 4. Write `docs/prototypes/<id>.md` with a diagram, and add a row to the README table.
 
